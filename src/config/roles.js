@@ -1,0 +1,22 @@
+import { PERMISSIONS } from "./permissions.js";
+
+export const ROLES = {
+  user: [
+    PERMISSIONS.ORDER_CREATE,
+    PERMISSIONS.ORDER_VIEW_OWN,
+    PERMISSIONS.ORDER_CANCEL,
+    PERMISSIONS.PRODUCT_VIEW,
+  ],
+
+  manager: [
+    PERMISSIONS.ORDER_VIEW_ALL,
+    PERMISSIONS.ORDER_UPDATE_STATUS,
+    PERMISSIONS.ORDER_CANCEL,
+    PERMISSIONS.PRODUCT_CREATE,
+    PERMISSIONS.PRODUCT_UPDATE,
+  ],
+
+  admin: [
+    ...Object.values(PERMISSIONS), // كل الصلاحيات
+  ],
+};
