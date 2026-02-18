@@ -1,1 +1,9 @@
+# backend/.gitignore
+node_modules/
 .env
+.env.local
+.env.production
+dist/
+build/
+uploads/
+.vercel

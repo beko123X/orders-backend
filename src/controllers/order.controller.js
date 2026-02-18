@@ -13,6 +13,8 @@ import stripe from "../services/stripe.service.js";
  * @route POST /api/orders
  * @access User
  */
+// backend/controllers/order.controller.js
+
 export const createOrder = async (req, res) => {
   const { products } = req.body;
 
@@ -31,16 +33,26 @@ export const createOrder = async (req, res) => {
     for (let p of products) {
       const dbProd = await Product.findById(p.product).session(session);
       if (!dbProd) throw new Error(`Product ${p.product} not found`);
-      if (p.quantity > dbProd.stock)
+      
+      console.log('🔍 Product found:', dbProd.name, 'Image:', dbProd.imageUrl); // ✅ للتحقق
+      
+      if (p.quantity > dbProd.stock) {
         throw new Error(
           `Not enough stock for product ${dbProd.name}. Available: ${dbProd.stock}`
         );
+      }
 
       dbProd.stock -= p.quantity;
       await dbProd.save({ session });
 
+      // ✅ تأكد من حفظ كامل بيانات المنتج
       orderProducts.push({
-        product: dbProd._id,
+        product: {
+          _id: dbProd._id,
+          name: dbProd.name,
+          price: dbProd.price,
+          imageUrl: dbProd.imageUrl // ✅ مهم جداً
+        },
         quantity: p.quantity,
         price: dbProd.price,
       });
@@ -49,19 +61,19 @@ export const createOrder = async (req, res) => {
     }
 
     const order = await Order.create(
-      [
-        {
-          user: req.user._id,
-          products: orderProducts,
-          totalPrice,
-        },
-      ],
+      [{
+        user: req.user._id,
+        products: orderProducts,
+        totalPrice,
+      }],
       { session }
-      );
+    );
 
     await session.commitTransaction();
     session.endSession();
 
+    console.log('✅ Order created with products:', order[0].products.length);
+    
     res.status(201).json(order[0]);
   } catch (error) {
     await session.abortTransaction();
@@ -72,126 +84,94 @@ export const createOrder = async (req, res) => {
 
 
 
-// export const createOrder = async (req, res) => {
-//   const session = await mongoose.startSession();
+// backend/controllers/order.controller.js
 
-//   try {
-//     session.startTransaction();
-
-//     const { products } = req.body;
-
-//     if (!products || products.length === 0) {
-//       throw new Error("No products provided");
-//     }
-
-//     let orderProducts = [];
-//     let totalPrice = 0;
-
-//     for (let item of products) {
-//       const product = await Product.findById(item.product).session(session);
-
-//       if (!product) {
-//         throw new Error("Product not found");
-//       }
-
-//       if (product.stock < item.quantity) {
-//         throw new Error(`Not enough stock for ${product.name}`);
-//       }
-
-//       product.stock -= item.quantity;
-//       await product.save({ session });
-
-//       orderProducts.push({
-//         product: product._id,
-//         quantity: item.quantity,
-//         price: product.price,
-//       });
-
-//       totalPrice += product.price * item.quantity;
-//     }
-
-//     const order = await Order.create(
-//       [
-//         {
-//           user: req.user._id,
-//           products: orderProducts,
-//           totalPrice,
-//           status: "pending",
-//         },
-//       ],
-//       { session }
-//     );
-
-//     await session.commitTransaction();
-//     session.endSession();
-
-//     res.status(201).json(order[0]);
-//   } catch (error) {
-//     await session.abortTransaction();
-//     session.endSession();
-
-//     res.status(400).json({ message: error.message });
-//   }
-// };
-
-
-/**
- * Get my orders
- * GET /api/orders/myorders
- */
+// Get my orders
 export const getMyOrders = async (req, res) => {
-  const orders = await Order.find({ user: req.user._id }).populate("products.product", "name price");
-  res.json(orders);
+  try {
+    const orders = await Order.find({ user: req.user._id })
+      .populate({
+        path: 'products.product',
+        select: 'name price imageUrl description stock' // ✅ تأكد من وجود imageUrl
+      })
+      .sort({ createdAt: -1 });
+
+    // ✅ للتحقق - طباعة البيانات
+    console.log('📦 Orders found:', orders.length);
+    orders.forEach((order, index) => {
+      console.log(`Order ${index + 1}:`, order._id);
+      order.products.forEach((item, pIndex) => {
+        console.log(`  Product ${pIndex + 1}:`, {
+          name: item.product?.name,
+          imageUrl: item.product?.imageUrl // ✅ يجب أن يظهر هنا
+        });
+      });
+    });
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Error in getMyOrders:', error);
+    res.status(500).json({ message: error.message });
+  }
 };
 
 /**
  * Get all orders (Admin)
  * GET /api/orders
  */
+// backend/controllers/order.controller.js
+// تأكد من وجود هذه الدالة بالشكل الصحيح
+
+// Get all orders (Admin & Manager)
 export const getAllOrders = async (req, res) => {
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  try {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-  const filter = {};
+    const filter = {};
 
-  // Filter by status
-  if (req.query.status) {
-    filter.status = req.query.status;
-  }
-
-  // Filter by user
-  if (req.query.user) {
-    filter.user = req.query.user;
-  }
-
-  // Filter by price range
-  if (req.query.minPrice || req.query.maxPrice) {
-    filter.totalPrice = {};
-    if (req.query.minPrice) {
-      filter.totalPrice.$gte = Number(req.query.minPrice);
+    // Filter by status
+    if (req.query.status) {
+      filter.status = req.query.status;
     }
-    if (req.query.maxPrice) {
-      filter.totalPrice.$lte = Number(req.query.maxPrice);
+
+    // Filter by user
+    if (req.query.user) {
+      filter.user = req.query.user;
     }
+
+    // Filter by price range
+    if (req.query.minPrice || req.query.maxPrice) {
+      filter.totalPrice = {};
+      if (req.query.minPrice) filter.totalPrice.$gte = Number(req.query.minPrice);
+      if (req.query.maxPrice) filter.totalPrice.$lte = Number(req.query.maxPrice);
+    }
+
+    const total = await Order.countDocuments(filter);
+
+    const orders = await Order.find(filter)
+      .populate("user", "name email")
+      .populate("products.product", "name price imageUrl")
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      page,
+      pages: Math.ceil(total / limit),
+      count: orders.length,
+      total,
+      orders,
+    });
+  } catch (error) {
+    console.error('Error in getAllOrders:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
-
-  const total = await Order.countDocuments(filter);
-
-  const orders = await Order.find(filter)
-    .populate("user", "name email")
-    .populate("products.product", "name price")
-    .skip(skip)
-    .limit(limit)
-    .sort({ createdAt: -1 });
-
-  res.json({
-    page,
-    pages: Math.ceil(total / limit),
-    count: orders.length,
-    total,
-    orders,
-  });
 };
 
 

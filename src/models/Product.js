@@ -1,4 +1,3 @@
-import mongoose from "mongoose";
 
 /**
  * @swagger
@@ -22,14 +21,41 @@ import mongoose from "mongoose";
  *           format: date-time
  */
 
+
+// models/Product.js
+
+// models/Product.js
+import mongoose from "mongoose";
+
 const productSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    price: { type: Number, required: true, min: 0 },
-    description: { type: String },
-    stock: { type: Number, default: 0, min: 0 },
+    name: { 
+      type: String, 
+      required: [true, 'Product name is required'] 
+    },
+    price: { 
+      type: Number, 
+      required: [true, 'Price is required'], 
+      min: [0, 'Price cannot be negative'] 
+    },
+    description: { 
+      type: String,
+      default: ''
+    },
+    stock: { 
+      type: Number, 
+      default: 0, 
+      min: [0, 'Stock cannot be negative'] 
+    },
+    imageUrl: { 
+      type: String,
+      default: null
+    }
   },
-  { timestamps: true }
+  { 
+    timestamps: true 
+  }
 );
 
-export default mongoose.model("Product", productSchema);
+const Product = mongoose.model("Product", productSchema);
+export default Product;
