@@ -1,4 +1,4 @@
-import 'dotenv/config.js'; // أو import dotenv from "dotenv"; dotenv.config();
+import 'dotenv/config.js';
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.routes.js";
@@ -10,89 +10,65 @@ import paymentRoutes from "./routes/payment.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import bodyParser from "body-parser";
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 
-// app.js (add this line)
-
-
-// Add this after your other middleware
-
-
-
-// This middleware must be BEFORE other body parsers for webhook
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Middleware
 app.use(express.json());
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://order-management-system-client.vercel.app'
+  ],
+  credentials: true
+}));
 
+// Webhook middleware (must be before other body parsers)
 app.use(
   "/api/payments/stripe/webhook",
   bodyParser.raw({ type: "application/json" })
 );
 
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://order-management-system-client.vercel.app' // رابط Frontend بعد النشر
-  ],
-  credentials: true
-}));
+// ✅ الطريقة الصحيحة لمسار uploads (يعمل محلياً وعلى Vercel)
+const uploadsPath = path.join(__dirname, 'uploads');
+console.log('📁 Uploads path:', uploadsPath);
 
-
-app.get("/", (req, res) => {
-  res.send("Order Management System API is running");
-});
-
-
-
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-
-app.use("/api/payments", paymentRoutes);
-
-app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/orders", orderRoutes);
-
-
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-
-// backend/app.js
-
-
-// ✅ مسار uploads الثابت
-const uploadsPath = 'E:/js dev/order-management-system/backend/uploads';
-console.log('📁 Serving static files from:', uploadsPath);
-
-// تأكد من وجود المجلد
-if (!fs.existsSync(uploadsPath)) {
-  fs.mkdirSync(uploadsPath, { recursive: true });
-  console.log('✅ Created uploads directory');
+// تأكد من وجود المجلد (للتشغيل المحلي فقط)
+if (process.env.NODE_ENV !== 'production') {
+  const fs = await import('fs');
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+    console.log('✅ Created uploads directory locally');
+  }
 }
 
 // خدمة الملفات الثابتة
 app.use('/uploads', express.static(uploadsPath));
 
-//users endpoints
-app.use('/api/users', userRoutes);
-// Test endpoint
-app.get('/test-uploads', (req, res) => {
-  const files = fs.existsSync(uploadsPath) ? fs.readdirSync(uploadsPath) : [];
-  res.json({
-    uploadsPath,
-    exists: fs.existsSync(uploadsPath),
-    files: files,
-    fileCount: files.length
-  });
+// Routes
+app.get("/", (req, res) => {
+  res.send("Order Management System API is running");
 });
 
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-
+// Test endpoint
+app.get('/test-uploads', (req, res) => {
+  res.json({
+    message: "Uploads endpoint working",
+    note: "On Vercel, files are not persisted",
+    uploadsPath: uploadsPath
+  });
+});
 
 export default app;
