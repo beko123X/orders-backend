@@ -47,6 +47,21 @@ if (process.env.NODE_ENV !== 'production') {
   }
 }
 
+// Serve React frontend build
+app.use(express.static(path.join(__dirname, "public")));
+
+
+app.get("/api", (req, res) => {
+  res.json({ message: "Hello from backend!" });
+});
+
+// For all other routes, serve frontend index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+
+
 // خدمة الملفات الثابتة
 app.use('/uploads', express.static(uploadsPath));
 
