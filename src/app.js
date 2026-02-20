@@ -1,6 +1,7 @@
 import 'dotenv/config.js';
 import express from "express";
 import cors from "cors";
+import mongoose from 'mongoose'; // IMPORTANT: Added this!
 import authRoutes from "./routes/auth.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
@@ -11,11 +12,50 @@ import userRoutes from "./routes/user.routes.js";
 import bodyParser from "body-parser";
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// =============================================
+// HEALTH CHECK ENDPOINTS - MUST BE FIRST!
+// =============================================
+
+// Simple health check for deployment platforms
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+// Additional health check for some platforms
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: "Order Management System API",
+    status: "running",
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    version: "1.0.0",
+    endpoints: {
+      health: "/health",
+      api: "/api",
+      docs: "/api-docs",
+      test: "/test-uploads",
+      debug: "/debug"
+    }
+  });
+});
 
 // =============================================
 // MIDDLEWARE
@@ -29,18 +69,17 @@ app.use(
 
 // Regular JSON parser for all other routes
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // =============================================
-// CORS CONFIGURATION - UPDATED FOR PRODUCTION
+// CORS CONFIGURATION - FIXED FOR PRODUCTION
 // =============================================
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://localhost:3001',
   'https://order-management-system-client.vercel.app',
-  // Add your Pxxl App backend URL (once deployed)
-  // 'https://your-app-name.pxxl.app',
-  // Add your Netlify frontend URL (once deployed)
-  // 'https://your-frontend.netlify.app'
+  // Will be updated after deployment
 ];
 
 app.use(cors({
@@ -48,37 +87,36 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     
+    // For production, you can temporarily allow all origins to test
+    if (process.env.NODE_ENV === 'production') {
+      return callback(null, true); // REMOVE THIS AFTER TESTING!
+    }
+    
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+      console.warn('⚠️ Blocked origin:', origin);
+      return callback(null, false);
     }
     return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // =============================================
-// STATIC FILES & UPLOADS - CLOUD STORAGE VERSION
+// STATIC FILES & UPLOADS
 // =============================================
 
-// ⚠️ IMPORTANT: For production on Pxxl App, files won't persist!
-// Consider using cloud storage like Cloudinary, AWS S3, or Supabase
-// This is a temporary solution for development/testing
-
 const uploadsPath = path.join(__dirname, '../uploads');
-console.log('📁 Uploads path (temporary):', uploadsPath);
+console.log('📁 Uploads path:', uploadsPath);
 
-// Create uploads directory if it doesn't exist (works on Pxxl App but files won't persist after restarts)
-import fs from 'fs';
+// Create uploads directory if it doesn't exist
 if (!fs.existsSync(uploadsPath)) {
   try {
     fs.mkdirSync(uploadsPath, { recursive: true });
     console.log('✅ Created uploads directory');
   } catch (error) {
     console.log('⚠️ Could not create uploads directory:', error.message);
-    console.log('💡 For production, use cloud storage instead of local files');
   }
 }
 
@@ -86,38 +124,15 @@ if (!fs.existsSync(uploadsPath)) {
 app.use('/uploads', express.static(uploadsPath));
 
 // =============================================
-// ROUTES
+// API ROUTES
 // =============================================
-
-// API Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/payments", paymentRoutes);
-app.use("/api/users", userRoutes);
-
-// API Documentation
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// =============================================
-// TEST ENDPOINTS
-// =============================================
-
-// Root endpoint
-app.get("/", (req, res) => {
-  res.json({
-    message: "Order Management System API is running",
-    environment: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString(),
-    note: "This is the backend API. Frontend is hosted separately."
-  });
-});
 
 // API info endpoint
 app.get("/api", (req, res) => {
   res.json({ 
-    message: "Hello from backend!",
+    message: "Order Management System API",
     status: "healthy",
+    version: "1.0.0",
     endpoints: {
       auth: "/api/auth",
       products: "/api/products",
@@ -129,26 +144,69 @@ app.get("/api", (req, res) => {
   });
 });
 
-// Test uploads endpoint (informational only)
-app.get('/test-uploads', (req, res) => {
+// Debug endpoint
+app.get('/debug', (req, res) => {
   res.json({
-    message: "Uploads endpoint - For production, use cloud storage",
-    note: "Local file storage is temporary on Pxxl App. Files will not persist after app restarts.",
-    recommendation: "Implement cloud storage (Cloudinary/AWS S3) for production",
-    uploadsPath: uploadsPath
+    env: process.env.NODE_ENV,
+    port: process.env.PORT,
+    mongodb_uri_set: !!process.env.MONGO_URI,
+    jwt_secret_set: !!process.env.JWT_SECRET,
+    stripe_key_set: !!process.env.STRIPE_SECRET_KEY,
+    webhook_secret_set: !!process.env.STRIPE_WEBHOOK_SECRET,
+    node_version: process.version,
+    platform: process.platform,
+    memory: process.memoryUsage(),
+    uptime: process.uptime(),
+    mongodb_state: mongoose.connection.readyState
   });
 });
 
+// Test uploads endpoint
+app.get('/test-uploads', (req, res) => {
+  const files = fs.existsSync(uploadsPath) ? fs.readdirSync(uploadsPath) : [];
+  res.json({
+    message: "Uploads endpoint",
+    note: "Local file storage is temporary on Pxxl App",
+    uploadsPath: uploadsPath,
+    files: files,
+    fileCount: files.length
+  });
+});
+
+// Mount route handlers
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/users", userRoutes);
+
+// API Documentation
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // =============================================
-// ERROR HANDLING MIDDLEWARE
+// ERROR HANDLING
 // =============================================
 
-// 404 handler for undefined routes
+// 404 handler for undefined routes (THIS MUST BE LAST!)
 app.use('*', (req, res) => {
+  console.log('❌ 404 Not Found:', req.method, req.originalUrl);
   res.status(404).json({
     error: 'Route not found',
     message: `Cannot ${req.method} ${req.originalUrl}`,
-    availableEndpoints: '/api, /api-docs, /test-uploads'
+    availableEndpoints: [
+      "/",
+      "/health",
+      "/healthz",
+      "/api",
+      "/debug",
+      "/test-uploads",
+      "/api-docs",
+      "/api/auth",
+      "/api/products",
+      "/api/orders",
+      "/api/payments",
+      "/api/users"
+    ]
   });
 });
 
