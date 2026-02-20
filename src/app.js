@@ -2,13 +2,6 @@ import 'dotenv/config.js';
 import express from "express";
 import cors from "cors";
 import mongoose from 'mongoose';
-import authRoutes from "./routes/auth.routes.js";
-import orderRoutes from "./routes/order.routes.js";
-import productRoutes from "./routes/product.routes.js";
-import swaggerUi from "swagger-ui-express";
-import swaggerSpec from "./config/swagger.js";
-import paymentRoutes from "./routes/payment.routes.js";
-import userRoutes from "./routes/user.routes.js";
 import bodyParser from "body-parser";
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,24 +13,25 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // =============================================
-// 1. ESSENTIAL MIDDLEWARE (APPLIED FIRST)
+// 1. MIDDLEWARE الأساسية (الأولى دائماً)
 // =============================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Simple CORS - Allow everything for testing
+// CORS - للسماح بجميع الطلبات (للتجربة)
 app.use(cors({
     origin: true,
     credentials: true
 }));
 
 // =============================================
-// 2. HEALTH CHECK ENDPOINTS (MUST RESPOND FAST)
+// 2. HEALTH CHECK ENDPOINTS (يجب أن تكون سريعة)
 // =============================================
 app.get('/health', (req, res) => {
     return res.status(200).json({ 
         status: 'healthy',
-        time: new Date().toISOString()
+        time: new Date().toISOString(),
+        mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
     });
 });
 
@@ -45,9 +39,6 @@ app.get('/healthz', (req, res) => {
     return res.status(200).send('OK');
 });
 
-// =============================================
-// 3. TEST ENDPOINTS - TO VERIFY ROUTING WORKS
-// =============================================
 app.get('/', (req, res) => {
     return res.status(200).json({
         message: 'Order Management System API',
@@ -56,72 +47,23 @@ app.get('/', (req, res) => {
     });
 });
 
-app.get('/test', (req, res) => {
-    return res.status(200).json({ 
-        message: 'Test endpoint working',
-        method: req.method,
-        path: req.path
-    });
-});
-
-app.get('/api/test', (req, res) => {
-    return res.status(200).json({ 
-        message: 'API test endpoint working',
-        timestamp: new Date().toISOString()
-    });
-});
-
-app.get('/api', (req, res) => {
-    return res.status(200).json({
-        message: 'API is ready',
-        endpoints: {
-            auth: '/api/auth',
-            products: '/api/products',
-            orders: '/api/orders',
-            payments: '/api/payments',
-            users: '/api/users',
-            docs: '/api-docs'
-        }
-    });
-});
-
-app.get('/debug', (req, res) => {
-    return res.status(200).json({
-        env: process.env.NODE_ENV,
-        node_version: process.version,
-        mongodb_state: mongoose.connection.readyState,
-        routes: ['/', '/test', '/api/test', '/api', '/debug', '/api-docs', '/api/auth', '/api/products', '/api/orders']
-    });
-});
+// =============================================
+// 3. IMPORT الراوترز (بعد الـ middleware الأساسية)
+// =============================================
+import authRoutes from "./routes/auth.routes.js";
+import orderRoutes from "./routes/order.routes.js";
+import productRoutes from "./routes/product.routes.js";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./config/swagger.js";
+import paymentRoutes from "./routes/payment.routes.js";
+import userRoutes from "./routes/user.routes.js";
 
 // =============================================
-// 4. STATIC FILES & UPLOADS
-// =============================================
-const uploadsPath = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsPath)) {
-    try {
-        fs.mkdirSync(uploadsPath, { recursive: true });
-        console.log('✅ Created uploads directory');
-    } catch (error) {
-        console.log('⚠️ Uploads directory error:', error.message);
-    }
-}
-app.use('/uploads', express.static(uploadsPath));
-
-app.get('/test-uploads', (req, res) => {
-    return res.status(200).json({
-        message: 'Uploads endpoint',
-        uploadsPath: uploadsPath,
-        exists: fs.existsSync(uploadsPath)
-    });
-});
-
-// =============================================
-// 5. API ROUTES - Mount routers
+// 4. MOUNT ROUTERS - هذا هو الجزء الأهم!
 // =============================================
 console.log('📡 Mounting API routes...');
 
-// Auth routes
+// Auth routes - يجب أن تعمل الآن
 app.use("/api/auth", authRoutes);
 console.log('✅ Auth routes mounted at /api/auth');
 
@@ -146,7 +88,79 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 console.log('✅ Swagger docs mounted at /api-docs');
 
 // =============================================
-// 6. 404 HANDLER - MUST BE LAST
+// 5. STATIC FILES & UPLOADS
+// =============================================
+const uploadsPath = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsPath)) {
+    try {
+        fs.mkdirSync(uploadsPath, { recursive: true });
+        console.log('✅ Created uploads directory');
+    } catch (error) {
+        console.log('⚠️ Uploads directory error:', error.message);
+    }
+}
+app.use('/uploads', express.static(uploadsPath));
+
+// Test uploads endpoint
+app.get('/test-uploads', (req, res) => {
+    return res.status(200).json({
+        message: 'Uploads endpoint',
+        uploadsPath: uploadsPath,
+        exists: fs.existsSync(uploadsPath)
+    });
+});
+
+// =============================================
+// 6. TEST ENDPOINTS - للتأكد من أن الراوترز تعمل
+// =============================================
+app.get('/api/test-direct', (req, res) => {
+    return res.status(200).json({ 
+        message: 'Direct API test endpoint working',
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/api', (req, res) => {
+    return res.status(200).json({
+        message: 'API is ready',
+        endpoints: {
+            auth: '/api/auth',
+            products: '/api/products',
+            orders: '/api/orders',
+            payments: '/api/payments',
+            users: '/api/users',
+            docs: '/api-docs',
+            test: '/api/test-direct'
+        }
+    });
+});
+
+app.get('/debug', (req, res) => {
+    const routes = [];
+    if (app._router && app._router.stack) {
+        app._router.stack.forEach(layer => {
+            if (layer.route) {
+                routes.push(`${Object.keys(layer.route.methods)} ${layer.route.path}`);
+            } else if (layer.name === 'router' && layer.handle.stack) {
+                layer.handle.stack.forEach(subLayer => {
+                    if (subLayer.route) {
+                        routes.push(`  ↳ ${Object.keys(subLayer.route.methods)} /api${subLayer.route.path}`);
+                    }
+                });
+            }
+        });
+    }
+    
+    return res.status(200).json({
+        env: process.env.NODE_ENV,
+        node_version: process.version,
+        mongodb_state: mongoose.connection.readyState,
+        registered_routes: routes
+    });
+});
+
+// =============================================
+// 7. 404 HANDLER - يجب أن يكون في النهاية
 // =============================================
 app.use('*', (req, res) => {
     console.log(`❌ 404 Not Found: ${req.method} ${req.originalUrl}`);
@@ -157,13 +171,14 @@ app.use('*', (req, res) => {
             '/',
             '/health',
             '/healthz',
-            '/test',
-            '/api/test',
             '/api',
+            '/api/test-direct',
             '/debug',
             '/test-uploads',
             '/api-docs',
-            '/api/auth',
+            '/api/auth/test',
+            '/api/auth/register',
+            '/api/auth/login',
             '/api/products',
             '/api/orders',
             '/api/payments',
@@ -173,7 +188,7 @@ app.use('*', (req, res) => {
 });
 
 // =============================================
-// 7. ERROR HANDLER
+// 8. ERROR HANDLER
 // =============================================
 app.use((err, req, res, next) => {
     console.error('❌ Error:', err.stack);
