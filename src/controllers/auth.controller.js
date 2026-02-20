@@ -1,226 +1,98 @@
-// controllers/auth.controller.js
 import User from "../models/User.js";
 import generateToken from "../utils/generateToken.js";
-import mongoose from "mongoose"; // ✅ أضف هذا السطر إذا كان مفقوداً
 
-
+// @desc    Register a new user
+// @route   POST /api/auth/register
+// @access  Public
 export const register = async (req, res) => {
-  const { name, email, password } = req.body;
-
-  const userExists = await User.findOne({ email });
-  if (userExists) {
-    return res.status(400).json({ message: "User already exists" });
-  }
-
-  const user = await User.create({ name, email, password });
-
-  res.status(201).json({
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    token: generateToken(user._id)
-  });
-};
-
-export const login = async (req, res) => {
-  const { email, password } = req.body;
-
-  const user = await User.findOne({ email });
-  if (!user || !(await user.comparePassword(password))) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
-
-  // ✅ تحديث آخر تسجيل دخول
-  user.lastLogin = new Date();
-  await user.save();
-
-  res.json({
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    token: generateToken(user._id)
-  });
-};
-
-// ✅ دالة جلب جميع المستخدمين (لصفحة Admin)
-export const getUsers = async (req, res) => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const { name, email, password } = req.body;
 
-    // فلترة حسب الدور
-    const filter = {};
-    if (req.query.role && req.query.role !== 'all') {
-      filter.role = req.query.role;
-    }
-
-    // بحث بالاسم أو البريد الإلكتروني
-    if (req.query.search) {
-      filter.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { email: { $regex: req.query.search, $options: 'i' } }
-      ];
-    }
-
-    const total = await User.countDocuments(filter);
-    const users = await User.find(filter)
-      .select('-password')
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    // جلب عدد طلبات كل مستخدم (إذا كان لديك نموذج Order)
-    let usersWithOrderCount = users;
-    try {
-      const Order = mongoose.model('Order');
-      usersWithOrderCount = await Promise.all(
-        users.map(async (user) => {
-          const orderCount = await Order.countDocuments({ user: user._id });
-          return {
-            ...user.toObject(),
-            orderCount
-          };
-        })
-      );
-    } catch (error) {
-      // إذا لم يكن نموذج Order موجوداً، نكمل بدون عدد الطلبات
-      usersWithOrderCount = users.map(user => ({
-        ...user.toObject(),
-        orderCount: 0
-      }));
-    }
-
-    res.json({
-      success: true,
-      page,
-      pages: Math.ceil(total / limit),
-      total,
-      limit,
-      users: usersWithOrderCount
-    });
-
-  } catch (error) {
-    console.error('Error in getUsers:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
-  }
-};
-
-// ✅ دالة جلب مستخدم واحد
-export const getUserById = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "User not found" 
-      });
-    }
-
-    res.json({
-      success: true,
-      user
-    });
-
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
-  }
-};
-
-// ✅ دالة تحديث دور المستخدم
-export const updateUserRole = async (req, res) => {
-  try {
-    const { role } = req.body;
-    
-    const validRoles = ['user', 'manager', 'admin'];
-    if (!validRoles.includes(role)) {
+    // Check if user exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
       return res.status(400).json({ 
-        success: false, 
-        message: "Invalid role" 
+        success: false,
+        message: "User already exists" 
       });
     }
 
-    // منع تغيير دور آخر Admin
-    if (role !== 'admin') {
-      const adminCount = await User.countDocuments({ role: 'admin' });
-      const user = await User.findById(req.params.id);
-      
-      if (user && user.role === 'admin' && adminCount <= 1) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Cannot change the last admin's role" 
-        });
-      }
-    }
+    // Create user
+    const user = await User.create({ name, email, password });
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { role },
-      { new: true }
-    ).select('-password');
-
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "User not found" 
-      });
-    }
-
-    res.json({
+    res.status(201).json({
       success: true,
-      message: "User role updated successfully",
-      user
+      message: "User registered successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      token: generateToken(user._id)
     });
-
   } catch (error) {
+    console.error('Register error:', error);
     res.status(500).json({ 
-      success: false, 
+      success: false,
       message: error.message 
     });
   }
 };
 
-// ✅ دالة حذف المستخدم
-export const deleteUser = async (req, res) => {
+// @desc    Login user
+// @route   POST /api/auth/login
+// @access  Public
+export const login = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const { email, password } = req.body;
 
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "User not found" 
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({ 
+        success: false,
+        message: "Invalid credentials" 
       });
     }
 
-    // منع حذف آخر Admin
-    if (user.role === 'admin') {
-      const adminCount = await User.countDocuments({ role: 'admin' });
-      if (adminCount <= 1) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Cannot delete the last admin" 
-        });
-      }
-    }
-
-    await user.deleteOne();
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
 
     res.json({
       success: true,
-      message: "User deleted successfully"
+      message: "Login successful",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      token: generateToken(user._id)
     });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
+  }
+};
 
+// @desc    Get current user profile
+// @route   GET /api/auth/profile
+// @access  Private
+export const getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    res.json({
+      success: true,
+      user
+    });
   } catch (error) {
     res.status(500).json({ 
-      success: false, 
+      success: false,
       message: error.message 
     });
   }

@@ -1,52 +1,44 @@
+// تعريف الصلاحيات المتاحة
 export const PERMISSIONS = {
-  // Orders
-  ORDER_CREATE: "orders:create",
-  ORDER_VIEW_OWN: "orders:view:own",
-  ORDER_VIEW_ALL: "orders:view:all",
-  ORDER_UPDATE_STATUS: "orders:update:status",
-  ORDER_CANCEL: "orders:cancel",
-  ORDER_DELETE: "orders:delete",
-
-  
-
-  // Products
-  PRODUCT_CREATE: "products:create",
-  PRODUCT_UPDATE: "products:update",
-  PRODUCT_DELETE: "products:delete",
-  PRODUCT_VIEW: "products:view",
-
-  // Users
-  USER_UPDATE_ROLE: "users:update:role",
-
-  // Payments
-  CREATE_PAYMENT: "create_payment",
-  REFUND_PAYMENT: "refund_payment",
-
   // User permissions
-  USER_MANAGE: 'user:manage', // ✅ أضف هذا
   USER_VIEW: 'user:view',
-  USER_DELETE: 'user:delete'
-};
-export const ROLES = {
-  ADMIN: 'admin',
-  MANAGER: 'manager',
-  USER: 'user'
+  USER_CREATE: 'user:create',
+  USER_EDIT: 'user:edit',
+  USER_DELETE: 'user:delete',
+  USER_MANAGE: 'user:manage',
+  
+  // Product permissions
+  PRODUCT_VIEW: 'product:view',
+  PRODUCT_CREATE: 'product:create',
+  PRODUCT_EDIT: 'product:edit',
+  PRODUCT_DELETE: 'product:delete',
+  PRODUCT_MANAGE: 'product:manage',
+  
+  // Order permissions
+  ORDER_VIEW: 'order:view',
+  ORDER_CREATE: 'order:create',
+  ORDER_EDIT: 'order:edit',
+  ORDER_DELETE: 'order:delete',
+  ORDER_MANAGE: 'order:manage'
 };
 
-  export const ROLE_PERMISSIONS = {
-  [ROLES.ADMIN]: Object.values(PERMISSIONS),
-
-  [ROLES.MANAGER]: [
+// صلاحيات كل دور
+export const ROLE_PERMISSIONS = {
+  user: [
+    PERMISSIONS.USER_VIEW,
     PERMISSIONS.PRODUCT_VIEW,
-    PERMISSIONS.ORDER_VIEW_ALL,
-    PERMISSIONS.ORDER_UPDATE_STATUS,
-    PERMISSIONS.USER_VIEW // Managers can view users but not manage them
+    PERMISSIONS.ORDER_VIEW,
+    PERMISSIONS.ORDER_CREATE
   ],
-
-  [ROLES.USER]: [
+  manager: [
+    PERMISSIONS.USER_VIEW,
+    PERMISSIONS.USER_EDIT,
     PERMISSIONS.PRODUCT_VIEW,
-    PERMISSIONS.ORDER_VIEW_OWN,
-    PERMISSIONS.ORDER_CANCEL,
-    PERMISSIONS.CREATE_PAYMENT
-  ]
+    PERMISSIONS.PRODUCT_CREATE,
+    PERMISSIONS.PRODUCT_EDIT,
+    PERMISSIONS.ORDER_VIEW,
+    PERMISSIONS.ORDER_CREATE,
+    PERMISSIONS.ORDER_EDIT
+  ],
+  admin: Object.values(PERMISSIONS) // Admin لديه كل الصلاحيات
 };

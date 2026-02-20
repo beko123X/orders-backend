@@ -1,4 +1,3 @@
-// backend/controllers/user.controller.js
 import User from "../models/User.js";
 import Order from "../models/Order.js";
 
@@ -13,13 +12,9 @@ export const getUsers = async (req, res) => {
 
     // Build filter
     const filter = {};
-
-    // Filter by role
-    if (req.query.role && req.query.role !== 'all' && req.query.role !== 'undefined') {
+    if (req.query.role && req.query.role !== 'all') {
       filter.role = req.query.role;
     }
-
-    // Search by name or email
     if (req.query.search) {
       filter.$or = [
         { name: { $regex: req.query.search, $options: 'i' } },
@@ -27,33 +22,23 @@ export const getUsers = async (req, res) => {
       ];
     }
 
-    // Get total count
-    const total = await User.countDocuments(filter);
-
     // Get users
+    const total = await User.countDocuments(filter);
     const users = await User.find(filter)
-      .select('-password') // Don't send password
+      .select('-password')
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
 
-    // Get order counts for each user
+    // Get order counts
     const usersWithOrderCount = await Promise.all(
       users.map(async (user) => {
-        try {
-          const orderCount = await Order.countDocuments({ user: user._id });
-          return {
-            ...user.toObject(),
-            orderCount,
-            lastActive: user.lastLogin || user.createdAt
-          };
-        } catch (error) {
-          return {
-            ...user.toObject(),
-            orderCount: 0,
-            lastActive: user.lastLogin || user.createdAt
-          };
-        }
+        const orderCount = await Order.countDocuments({ user: user._id });
+        return {
+          ...user.toObject(),
+          orderCount,
+          lastActive: user.lastLogin || user.createdAt
+        };
       })
     );
 
@@ -65,7 +50,6 @@ export const getUsers = async (req, res) => {
       limit,
       users: usersWithOrderCount
     });
-
   } catch (error) {
     console.error('Error in getUsers:', error);
     res.status(500).json({ 
@@ -89,25 +73,21 @@ export const getUserById = async (req, res) => {
       });
     }
 
-    // Get user's orders
-    let recentOrders = [];
-    try {
-      recentOrders = await Order.find({ user: user._id })
-        .sort({ createdAt: -1 })
-        .limit(5);
-    } catch (error) {
-      // Order model might not exist
-    }
+    // Get user's recent orders
+    const recentOrders = await Order.find({ user: user._id })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('_id totalPrice status createdAt');
 
     res.json({
       success: true,
       user: {
         ...user.toObject(),
         recentOrders,
+        totalOrders: await Order.countDocuments({ user: user._id }),
         lastActive: user.lastLogin || user.createdAt
       }
     });
-
   } catch (error) {
     res.status(500).json({ 
       success: false, 
@@ -123,7 +103,6 @@ export const updateUserRole = async (req, res) => {
   try {
     const { role } = req.body;
     
-    // Validate role
     const validRoles = ['user', 'manager', 'admin'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ 
@@ -132,7 +111,7 @@ export const updateUserRole = async (req, res) => {
       });
     }
 
-    // Don't allow changing the last admin's role
+    // Prevent changing last admin
     if (role !== 'admin') {
       const adminCount = await User.countDocuments({ role: 'admin' });
       const user = await User.findById(req.params.id);
@@ -163,7 +142,6 @@ export const updateUserRole = async (req, res) => {
       message: "User role updated successfully",
       user
     });
-
   } catch (error) {
     res.status(500).json({ 
       success: false, 
@@ -186,7 +164,7 @@ export const deleteUser = async (req, res) => {
       });
     }
 
-    // Don't allow deleting the last admin
+    // Prevent deleting last admin
     if (user.role === 'admin') {
       const adminCount = await User.countDocuments({ role: 'admin' });
       if (adminCount <= 1) {
@@ -197,20 +175,14 @@ export const deleteUser = async (req, res) => {
       }
     }
 
-    // Delete user's orders if any
-    try {
-      await Order.deleteMany({ user: user._id });
-    } catch (error) {
-      // Order model might not exist
-    }
-
+    // Delete user's orders
+    await Order.deleteMany({ user: user._id });
     await user.deleteOne();
 
     res.json({
       success: true,
       message: "User deleted successfully"
     });
-
   } catch (error) {
     res.status(500).json({ 
       success: false, 
@@ -227,37 +199,19 @@ export const getUserStats = async (req, res) => {
     const totalUsers = await User.countDocuments();
     
     const roleStats = await User.aggregate([
-      {
-        $group: {
-          _id: "$role",
-          count: { $sum: 1 }
-        }
-      }
+      { $group: { _id: "$role", count: { $sum: 1 } } }
     ]);
 
-    // Get users created in the last 7 days
     const lastWeek = new Date();
     lastWeek.setDate(lastWeek.getDate() - 7);
-
-    const newUsers = await User.countDocuments({
-      createdAt: { $gte: lastWeek }
-    });
-
-    // Get active users today
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const activeToday = await User.countDocuments({
-      lastLogin: { $gte: today }
-    });
+    const newUsers = await User.countDocuments({ createdAt: { $gte: lastWeek } });
+    const activeToday = await User.countDocuments({ lastLogin: { $gte: today } });
 
-    // Format role stats
-    const roleCounts = {
-      admin: 0,
-      manager: 0,
-      user: 0
-    };
-
+    const roleCounts = { admin: 0, manager: 0, user: 0 };
     roleStats.forEach(stat => {
       if (stat._id === 'admin') roleCounts.admin = stat.count;
       if (stat._id === 'manager') roleCounts.manager = stat.count;
@@ -273,7 +227,6 @@ export const getUserStats = async (req, res) => {
         activeToday
       }
     });
-
   } catch (error) {
     res.status(500).json({ 
       success: false, 

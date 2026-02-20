@@ -1,25 +1,27 @@
-// routes/user.routes.js
 import express from "express";
 import {
   getUsers,
   getUserById,
   updateUserRole,
-  deleteUser
-} from "../controllers/auth.controller.js";
+  deleteUser,
+  getUserStats
+} from "../controllers/user.controller.js";
 import protect from "../middlewares/auth.middleware.js";
 import authorize from "../middlewares/authorize.middleware.js";
 import { PERMISSIONS } from "../config/permissions.js";
 
 const router = express.Router();
 
-// All user management routes require authentication and admin permissions
+// All routes require authentication
 router.use(protect);
-router.use(authorize(PERMISSIONS.USER_MANAGE));
 
-// User management endpoints
-router.get("/", getUsers);
-router.get("/:id", getUserById);
-router.put("/:id/role", updateUserRole);
-router.delete("/:id", deleteUser);
+// Stats endpoint (admin only)
+router.get("/stats", authorize(PERMISSIONS.USER_MANAGE), getUserStats);
+
+// User management endpoints (admin only)
+router.get("/", authorize(PERMISSIONS.USER_MANAGE), getUsers);
+router.get("/:id", authorize(PERMISSIONS.USER_MANAGE), getUserById);
+router.put("/:id/role", authorize(PERMISSIONS.USER_MANAGE), updateUserRole);
+router.delete("/:id", authorize(PERMISSIONS.USER_MANAGE), deleteUser);
 
 export default router;
