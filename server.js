@@ -36,3 +36,10 @@ server.on('error', (error) => {
   console.error('❌ Server error:', error);
   process.exit(1);
 });
+
+// ... باقي الكود
+
+// ✅ تأكد من وجود هذا السطر في النهاية
+export default app;
+
+// ❌ قم بإزالة أو تعليق أي كود إضافي بعد التصدير
