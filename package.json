@@ -6,12 +6,14 @@
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
-  "scripts": {
+  
+    "scripts": {
     "start": "node server.js",
+    "start:test": "node test-server.js",
     "dev": "nodemon server.js",
-    "build": "echo '✅ Build complete - no build step required'",
-    "postinstall": "echo '✅ Dependencies installed successfully'"
-  },
+    "build": "echo '✅ Build complete'"
+  }
+  ,
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
