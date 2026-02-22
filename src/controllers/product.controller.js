@@ -1,13 +1,8 @@
-
-// backend/controllers/product.controller.js
+// controllers/product.controller.js
 import Product from "../models/Product.js";
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { cloudinary } from "../config/cloudinary.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+// ===== CREATE PRODUCT =====
 export const createProduct = async (req, res) => {
   try {
     console.log('='.repeat(50));
@@ -26,31 +21,16 @@ export const createProduct = async (req, res) => {
     }
 
     let imageUrl = null;
+    let imagePublicId = null;
     
-    // ✅ معالجة الصورة مع تحقق إضافي
+    // ✅ معالجة الصورة من Cloudinary
     if (req.file) {
-      console.log('✅ File uploaded successfully');
-      console.log('File path:', req.file.path);
-      console.log('File destination:', req.file.destination);
-      console.log('File filename:', req.file.filename);
+      console.log('✅ File uploaded to Cloudinary');
+      console.log('Cloudinary URL:', req.file.path);
+      console.log('Cloudinary Public ID:', req.file.filename);
       
-      // تحقق من وجود الملف فعلياً
-      if (fs.existsSync(req.file.path)) {
-        console.log('✅ File exists on disk at:', req.file.path);
-        
-        // احصل على حجم الملف للتحقق
-        const stats = fs.statSync(req.file.path);
-        console.log('📊 File size:', stats.size, 'bytes');
-        
-        imageUrl = `/uploads/${req.file.filename}`;
-        console.log('🖼️ Image URL saved:', imageUrl);
-      } else {
-        console.log('❌ File does NOT exist on disk!');
-        return res.status(500).json({ 
-          success: false, 
-          message: "File upload failed - file not saved" 
-        });
-      }
+      imageUrl = req.file.path; // رابط Cloudinary الكامل
+      imagePublicId = req.file.filename; // معرف الصورة في Cloudinary
     } else {
       console.log('⚠️ No file uploaded');
     }
@@ -61,7 +41,8 @@ export const createProduct = async (req, res) => {
       price: Number(price),
       stock: Number(stock),
       description: description || '',
-      imageUrl
+      imageUrl,
+      imagePublicId
     });
 
     await product.save();
@@ -79,13 +60,13 @@ export const createProduct = async (req, res) => {
   } catch (error) {
     console.error('❌ Error creating product:', error);
     
-    // حذف الصورة إذا فشل إنشاء المنتج
-    if (req.file && fs.existsSync(req.file.path)) {
+    // حذف الصورة من Cloudinary إذا فشل إنشاء المنتج
+    if (req.file && req.file.filename) {
       try {
-        fs.unlinkSync(req.file.path);
-        console.log('🧹 Deleted uploaded file due to error');
-      } catch (unlinkErr) {
-        console.error('Error deleting file:', unlinkErr);
+        await cloudinary.uploader.destroy(req.file.filename);
+        console.log('🧹 Deleted uploaded image from Cloudinary due to error');
+      } catch (cloudinaryErr) {
+        console.error('Error deleting from Cloudinary:', cloudinaryErr);
       }
     }
 
@@ -98,49 +79,42 @@ export const createProduct = async (req, res) => {
   }
 };
 
-// دالة للتحقق من جميع المنتجات والصور
+// ===== CHECK PRODUCTS IMAGES =====
 export const checkProductsImages = async (req, res) => {
   try {
     const products = await Product.find();
-    const uploadDir = 'E:/js dev/order-management-system/backend/uploads';
     
-    const results = products.map(product => {
+    const results = await Promise.all(products.map(async (product) => {
       let imageExists = false;
-      let imagePath = null;
       
-      if (product.imageUrl) {
-        const filename = path.basename(product.imageUrl);
-        imagePath = path.join(uploadDir, filename);
-        imageExists = fs.existsSync(imagePath);
+      if (product.imagePublicId) {
+        try {
+          // التحقق من وجود الصورة في Cloudinary
+          const result = await cloudinary.api.resource(product.imagePublicId);
+          imageExists = !!result;
+        } catch (error) {
+          imageExists = false;
+        }
       }
       
       return {
         id: product._id,
         name: product.name,
         imageUrl: product.imageUrl,
-        imageExists: imageExists,
-        imagePath: imagePath,
-        imageInDb: !!product.imageUrl
+        imagePublicId: product.imagePublicId,
+        imageExists: imageExists
       };
-    });
-    
-    // قائمة الملفات في مجلد uploads
-    let filesInUploads = [];
-    if (fs.existsSync(uploadDir)) {
-      filesInUploads = fs.readdirSync(uploadDir);
-    }
+    }));
     
     res.json({
       success: true,
-      uploadsDirectory: uploadDir,
-      uploadsExists: fs.existsSync(uploadDir),
-      filesInUploads: filesInUploads,
       products: results
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 // ===== GET ALL PRODUCTS =====
 export const getProducts = async (req, res) => {
   try {
@@ -215,15 +189,23 @@ export const updateProduct = async (req, res) => {
     if (stock) product.stock = Number(stock);
     if (description) product.description = description;
 
+    // إذا تم رفع صورة جديدة
     if (req.file) {
-      // حذف الصورة القديمة إذا وجدت
-      if (product.imageUrl) {
-        const oldImagePath = path.join(__dirname, '..', product.imageUrl);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
+      console.log('📸 Updating product image...');
+      
+      // حذف الصورة القديمة من Cloudinary
+      if (product.imagePublicId) {
+        try {
+          await cloudinary.uploader.destroy(product.imagePublicId);
+          console.log('✅ Old image deleted from Cloudinary');
+        } catch (deleteErr) {
+          console.error('⚠️ Error deleting old image:', deleteErr);
         }
       }
-      product.imageUrl = `/uploads/${req.file.filename}`;
+      
+      // إضافة الصورة الجديدة
+      product.imageUrl = req.file.path;
+      product.imagePublicId = req.file.filename;
     }
 
     await product.save();
@@ -236,6 +218,16 @@ export const updateProduct = async (req, res) => {
 
   } catch (error) {
     console.error('Error in updateProduct:', error);
+    
+    // حذف الصورة الجديدة إذا فشل التحديث
+    if (req.file && req.file.filename) {
+      try {
+        await cloudinary.uploader.destroy(req.file.filename);
+      } catch (cloudinaryErr) {
+        console.error('Error deleting from Cloudinary:', cloudinaryErr);
+      }
+    }
+    
     res.status(500).json({ 
       success: false, 
       message: error.message 
@@ -254,11 +246,13 @@ export const deleteProduct = async (req, res) => {
       });
     }
 
-    // حذف الصورة إذا وجدت
-    if (product.imageUrl) {
-      const imagePath = path.join(__dirname, '..', product.imageUrl);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
+    // حذف الصورة من Cloudinary إذا وجدت
+    if (product.imagePublicId) {
+      try {
+        await cloudinary.uploader.destroy(product.imagePublicId);
+        console.log('✅ Image deleted from Cloudinary');
+      } catch (cloudinaryErr) {
+        console.error('⚠️ Error deleting from Cloudinary:', cloudinaryErr);
       }
     }
 

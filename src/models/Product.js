@@ -1,29 +1,3 @@
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     Product:
- *       type: object
- *       properties:
- *         _id:
- *           type: string
- *         name:
- *           type: string
- *         price:
- *           type: number
- *         stock:
- *           type: integer
- *         category:
- *           type: string
- *         createdAt:
- *           type: string
- *           format: date-time
- */
-
-
-// models/Product.js
-
 // models/Product.js
 import mongoose from "mongoose";
 
@@ -48,6 +22,10 @@ const productSchema = new mongoose.Schema(
       min: [0, 'Stock cannot be negative'] 
     },
     imageUrl: { 
+      type: String,
+      default: null
+    },
+    imagePublicId: {
       type: String,
       default: null
     }

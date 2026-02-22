@@ -1,51 +1,32 @@
-import express from 'express';
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+// test-server.js - الآن يستخدم التطبيق الرئيسي
+import app from "./src/app.js"; // استيراد التطبيق الرئيسي
+import connectDB from "./src/config/db.js";
+import dotenv from "dotenv";
 
 dotenv.config();
 
-const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-// =============================================
-// SIMPLE HEALTH CHECK - MUST RESPOND IMMEDIATELY
-// =============================================
+console.log('=' .repeat(50));
+console.log('🚀 Starting server with FULL APP...');
+console.log('=' .repeat(50));
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.status(200).json({ 
-    message: 'Server is running',
-    time: new Date().toISOString()
-  });
-});
+// Connect to MongoDB
+connectDB()
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('❌ MongoDB error:', err.message));
 
-// Health check - this is what Pxxl pings
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy' });
-});
-
-app.get('/healthz', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// Test endpoint
-app.get('/test', (req, res) => {
-  res.json({ working: true });
-});
-
-// =============================================
-// START SERVER WITHOUT MONGODB FIRST
-// =============================================
-
-console.log('🚀 Starting test server...');
-console.log(`📡 Binding to ${HOST}:${PORT}`);
-
+// Start the main app
 const server = app.listen(PORT, HOST, () => {
-  console.log(`✅ TEST SERVER RUNNING!`);
-  console.log(`📍 http://localhost:${PORT}`);
-  console.log(`📍 http://localhost:${PORT}/health`);
-  console.log(`📍 http://localhost:${PORT}/test`);
+  console.log('=' .repeat(50));
+  console.log(`✅ FULL APP IS RUNNING!`);
+  console.log('=' .repeat(50));
+  console.log(`📡 Health check:     http://localhost:${PORT}/health`);
+  console.log(`📡 API:              http://localhost:${PORT}/api`);
+  console.log(`📡 Auth test:        http://localhost:${PORT}/api/auth/test`);
+  console.log(`📡 Debug:            http://localhost:${PORT}/debug`);
+  console.log('=' .repeat(50));
 });
 
 server.on('error', (error) => {
